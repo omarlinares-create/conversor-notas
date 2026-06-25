@@ -6,115 +6,122 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
-# Configuración visual súper limpia para el usuario
+# Configuración visual ultra simplificada para el usuario final
 st.set_page_config(page_title="UMA - Convertidor de Notas", page_icon="📝", layout="centered")
 
-st.markdown("<h2 style='text-align: center; color: #1E3A8A; font-family: Arial;'>🏢 UNIVERSIDAD MODULAR ABIERTA</h2>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center; color: #4B5563; font-family: Arial;'>📊 Convertidor Automático de Notas (UONLINE)</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6B7280;'>Sube el PDF de Control de Asistencia para generar el cuadro de Excel con fórmulas.</p>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: #1E3A8A; font-family: Arial; font-weight: bold;'>🏢 UNIVERSIDAD MODULAR ABIERTA</h2>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #4B5563; font-family: Arial;'>📊 Convertidor de Listados UONLINE</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #7C3AED; font-weight: bold;'>Uso exclusivo para Control de Asistencia y Cuadro de Notas</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Único botón en pantalla para el usuario final
-pdf_adjunto = st.file_uploader("👉 Arrastre aquí el archivo PDF o haga clic para buscarlo", type=["pdf"])
+# Única opción en pantalla
+pdf_adjunto = st.file_uploader("📥 ARRASTRE AQUÍ EL PDF DE LA UNIVERSIDAD O HAGA CLIC PARA BUSCARLO", type=["pdf"])
 
 if pdf_adjunto is not None:
-    with st.spinner("⏳ Procesando lista... Por favor espere un momento."):
+    with st.spinner("⏳ Leyendo el listado de alumnos... Por favor espere."):
         try:
             texto_completo = ""
-            filas_tabla = []
+            alumnos_detectados = []
             
-            # 1. Extracción profunda del PDF de la UMA
+            # 1. Leer el PDF con pdfplumber extrayendo las celdas exactas del reporte de la UMA
             with pdfplumber.open(pdf_adjunto) as pdf:
                 for page in pdf.pages:
                     texto_completo += page.extract_text() + "\n"
                     tablas = page.extract_tables()
                     for tabla in tablas:
                         for fila in tabla:
-                            if fila:
-                                filas_tabla.append([str(celda).strip() for celda in fila if celda is not None])
-
-            # 2. Extracción precisa de los metadatos institucionales
-            facultad_match = re.search(r'Facultad\s*\n\s*([^\n]+)', texto_completo)
-            asignatura_match = re.search(r'Asignatura\s*\n\s*([^\n]+)', texto_completo)
-            ciclo_match = re.search(r'Ciclo\s*\n\s*Desde:\s*([^\n]+)', texto_completo)
-            aula_match = re.search(r'Aula\s*\n\s*\"([^\"]+)\"', texto_completo)
-            horario_match = re.search(r'Horario\s*\n\s*\"([^\"]+)\"', texto_completo)
-            dias_match = re.search(r'Días\s*\n\s*\"([^\"]+)\"', texto_completo)
-            docente_match = re.search(r'Docente\s*\n\s*([^\n]+)', texto_completo)
-
-            f_txt = facultad_match.group(1).upper() if facultad_match else "FACULTAD DE CIENCIAS ECONÓMICAS"
-            a_txt = asignatura_match.group(1).upper() if asignatura_match else "SISTEMAS OPERATIVOS"
-            
-            # Limpieza del ciclo (ej. Extraer CICLO 01-2026 de la cadena larga)
-            c_raw = ciclo_match.group(1) if ciclo_match else "CICLO 01-2026"
-            c_txt = "01-2026" if "01-2026" in c_raw else "01-2026"
-            
-            d_txt = docente_match.group(1).upper() if docente_match else "LIC. OMAR ALBERTO LINARES DEL CID"
-            
-            # Combinación de Día y Horario
-            dia = dias_match.group(1).upper() if dias_match else "JUEVES"
-            horas = horario_match.group(1).upper().replace(" P.M.", "").replace("P.M.", "")
-            h_txt = f"{dia} DE {horas} P.M."
-
-            # 3. Procesamiento inteligente de Alumnos (Carnet + Separación de Nombre Completo)
-            alumnos_procesados = []
-            
-            for fila in filas_tabla:
-                # El formato UONLINE ubica los carnets con patrón de dos letras y 9 números (ej: CB252100307)
-                carnet_match = [re.search(r'([A-Z]{2}\d{9})', celda) for celda in fila if isinstance(celda, str)]
-                carnet_match = [m.group(1) for m in carnet_match if m]
-                
-                if carnet_match:
-                    carnet = carnet_match[0]
-                    
-                    # El nombre suele estar en la celda contigua o en la misma fila limpia
-                    # Buscamos la celda que contiene solo texto largo (Nombre completo)
-                    nombre_completo = ""
-                    for celda in fila:
-                        if celda and not re.search(r'([A-Z]{2}\d{9})', celda) and len(celda) > 10 and "NOMBRE" not in celda and "Firma" not in celda:
-                            nombre_completo = celda.replace("\n", " ").strip()
-                            break
-                    
-                    if nombre_completo:
-                        # Convertir a minúsculas y luego separar apellidos y nombres por formato UMA
-                        partes = nombre_completo.split(" ")
-                        # Regla estándar: Los primeros dos elementos son Apellidos, los siguientes son Nombres
-                        if len(partes) >= 3:
-                            apellidos = f"{partes[0]} {partes[1]}".upper()
-                            nombres = " ".join(partes[2:]).upper()
-                        else:
-                            apellidos = nombre_completo.upper()
-                            nombres = "REVISAR"
+                            # Limpiar las celdas de valores nulos o vacíos
+                            fila_limpia = [str(c).strip() for c in fila if c is not None]
+                            if not fila_limpia:
+                                continue
                             
-                        # El formato de salida requiere el correo institucional derivado del carnet
-                        correo_institucional = f"{carnet.lower()}@uma.edu.sv"
-                        alumnos_procesados.append({
-                            "carnet": correo_institucional,
-                            "apellidos": apellidos,
-                            "nombres": nombres
-                        })
+                            # Buscar el patrón de Carnet de la UMA (Ej: CB252100307 o SA252100175)
+                            carnet = None
+                            nombre_completo = None
+                            
+                            for celda in fila_limpia:
+                                match_carnet = re.search(r'([A-Z]{2}\d{9})', celda)
+                                if match_carnet:
+                                    carnet = match_carnet.group(1)
+                                    break
+                            
+                            # Si encontramos un carnet en esta fila, buscamos el nombre del alumno
+                            if carnet:
+                                for celda in fila_limpia:
+                                    # El nombre está en la celda que tiene texto largo en mayúsculas y no es el encabezado
+                                    celda_clean = celda.replace("\n", " ").strip()
+                                    if len(celda_clean) > 10 and carnet not in celda_clean and "NOMBRE" not in celda_clean and "Firma" not in celda_clean:
+                                        # Limpiar números que a veces se pegan al inicio o final debido al formato del reporte
+                                        nombre_completo = re.sub(r'^\d+\s*|\s*\d+$', '', celda_clean).strip()
+                                        break
+                                
+                                if carnet and nombre_completo:
+                                    alumnos_detectados.append({
+                                        "carnet_raw": carnet,
+                                        "nombre_completo": nombre_completo
+                                    })
 
-            # Quitar duplicados por seguridad
+            # 2. Extracción de Datos de la Materia desde la Cabecera Real del PDF
+            facultad_m = re.search(r'Facultad\n\s*([^\n]+)', texto_completo)
+            asignatura_m = re.search(r'Asignatura\n\s*([^\n]+)', texto_completo)
+            ciclo_m = re.search(r'Desde:\s*\",?\"(CICLO\s*\d+-\d+)', texto_completo) or re.search(r'(CICLO\s*\d+-\d+)', texto_completo)
+            aula_m = re.search(r'\"Aula\n\",\"([^\"]+)\"', texto_completo) or re.search(r'Aula\n\s*([^\n]+)', texto_completo)
+            horario_m = re.search(r'\"Horario\n\",\"([^\"]+)\"', texto_completo) or re.search(r'Horario\n\s*([^\n]+)', texto_completo)
+            dias_m = re.search(r'\"Días\n\",\"([^\"]+)\"', texto_completo) or re.search(r'Días\n\s*([^\n]+)', texto_completo)
+            docente_m = re.search(r'Docente\n\s*([^\n]+)', texto_completo)
+
+            f_txt = facultad_m.group(1).strip().upper() if facultad_m else "FACULTAD DE CIENCIAS ECONÓMICAS"
+            a_txt = asignatura_m.group(1).strip().upper() if asignatura_m else "SISTEMAS OPERATIVOS"
+            c_txt = "01-2026"  # Valor por defecto limpio según tu plantilla
+            if ciclo_m:
+                c_clean = ciclo_m.group(1).replace("CICLO", "").strip()
+                if c_clean: c_txt = c_clean
+                
+            d_txt = docente_m.group(1).strip().upper() if docente_m else "LIC. OMAR ALBERTO LINARES DEL CID"
+            
+            # Formatear el horario exacto combinando Día + Horas limpias
+            dia = dias_m.group(1).replace("\n", "").strip().upper() if dias_m else "JUEVES"
+            horas = horario_m.group(1).replace("\n", "").strip().upper() if horario_m else "13:00 P.M. - 16:40 P.M."
+            horas_clean = horas.replace(" P.M.", "").replace("P.M.", "")
+            h_txt = f"{dia} DE {horas_clean} P.M."
+
+            # 3. Procesar y Separar Apellidos y Nombres (Regla de los 2 primeros elementos)
             lista_final = []
             vistos = set()
-            for al in alumnos_procesados:
-                if al['carnet'] not in vistos:
-                    vistos.add(al['carnet'])
-                    lista_final.append(al)
+            
+            for al in alumnos_detectados:
+                correo = f"{al['carnet_raw'].lower()}@uma.edu.sv"
+                if correo in vistos:
+                    continue
+                vistos.add(correo)
+                
+                partes = [p for p in al['nombre_completo'].split(" ") if p]
+                if len(partes) >= 3:
+                    apellidos = f"{partes[0]} {partes[1]}".upper()
+                    nombres = " ".join(partes[2:]).upper()
+                else:
+                    apellidos = al['nombre_completo'].upper()
+                    nombres = ""
+                
+                lista_final.append({
+                    "correo": correo,
+                    "apellidos": apellidos,
+                    "nombres": nombres
+                })
 
-            # Ordenar alfabéticamente por apellidos
-            lista_final = sorted(lista_final, key=lambda k: k['apellidos'])
+            # Ordenar por Apellido Alfabéticamente tal como lo requiere el cuadro final
+            lista_final = sorted(lista_final, key=lambda x: x['apellidos'])
 
             if not lista_final:
-                st.error("❌ No se pudieron procesar alumnos de este PDF. Asegúrate de que sea el reporte correcto.")
+                st.error("❌ El formato de este PDF no coincide con el Control de Asistencia de la UMA. Por favor verifica el archivo.")
             else:
-                # 4. Generación del libro de Excel idéntico al solicitado
+                # 4. Crear el Excel con el Formato Institucional Exacto y Fórmulas Activas
                 output = io.BytesIO()
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "Notas"
 
-                # Estilos visuales de celdas
+                # Estilos visuales idénticos a tu plantilla original
                 f_tit = Font(name='Arial', size=10, bold=True)
                 f_norm = Font(name='Arial', size=10)
                 f_enc = Font(name='Arial', size=9, bold=True)
@@ -122,7 +129,7 @@ if pdf_adjunto is not None:
                 thin_b = Border(left=Side(style='thin', color='B0B0B0'), right=Side(style='thin', color='B0B0B0'),
                                 top=Side(style='thin', color='B0B0B0'), bottom=Side(style='thin', color='B0B0B0'))
 
-                # Armar Cabecera Institucional
+                # Escribir Cabecera en las filas de la 1 a la 8
                 ws['A1'] = "UNIVERSIDAD MODULAR ABIERTA"
                 ws['A2'] = f"FACULTAD : {f_txt}"
                 ws['A3'] = "CENTRO : SEDE SONSONATE"
@@ -136,7 +143,7 @@ if pdf_adjunto is not None:
                 for r in range(1, 9):
                     ws.cell(row=r, column=1).font = f_tit
 
-                # Títulos de Columnas (Fila 10)
+                # Encabezados de Columnas Oficiales (Fila 10)
                 headers = ["N", "CARNET", "APELLIDOS", "NOMBRES", "LAB1", "0.4", "PAR1", "0.6", "PARC", "P.N1.", 
                            "LAB2", "0.4", "PAR2", "0.6", "PARC", "P.N2.", "LAB3", "0.4", "PAR3", "0.6", "PARC", "P.N3.", "PROM. FINAL", "OBSERVACIONES"]
                 for c_idx, h in enumerate(headers, 1):
@@ -144,7 +151,7 @@ if pdf_adjunto is not None:
                     cell.font = f_enc; cell.fill = fill_gray; cell.border = thin_b
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
-                # Multiplicadores oficiales fijados en Fila 11
+                # Multiplicadores de periodo establecidos en la Fila 11
                 ws.cell(row=11, column=10, value=0.3)
                 ws.cell(row=11, column=16, value=0.3)
                 ws.cell(row=11, column=22, value=0.4)
@@ -152,15 +159,15 @@ if pdf_adjunto is not None:
                 for c in range(1, 25):
                     ws.cell(row=11, column=c).font = f_enc; ws.cell(row=11, column=c).border = thin_b
 
-                # Volcar alumnos y configurar las fórmulas automáticas de Excel
+                # Volcar a los alumnos y programar las celdas con fórmulas matemáticas automatizadas
                 for idx, al in enumerate(lista_final, 1):
                     r = 11 + idx
                     ws.cell(row=r, column=1, value=idx).alignment = Alignment(horizontal="center")
-                    ws.cell(row=r, column=2, value=al['carnet'])
+                    ws.cell(row=r, column=2, value=al['correo'])
                     ws.cell(row=r, column=3, value=al['apellidos'])
                     ws.cell(row=r, column=4, value=al['nombres'])
                     
-                    # Multiplicadores internos por alumno
+                    # Ponderaciones fijas por fila de notas individuales
                     ws.cell(row=r, column=6, value=0.4)
                     ws.cell(row=r, column=8, value=0.6)
                     ws.cell(row=r, column=12, value=0.4)
@@ -168,19 +175,20 @@ if pdf_adjunto is not None:
                     ws.cell(row=r, column=18, value=0.4)
                     ws.cell(row=r, column=20, value=0.6)
                     
-                    # Fórmulas de cálculo directo
-                    ws.cell(row=r, column=9, value=f"=E{r}*F{r}+G{r}*H{r}")
-                    ws.cell(row=r, column=10, value=f"=I{r}*J11")
-                    ws.cell(row=r, column=15, value=f"=K{r}*L{r}+M{r}*N{r}")
-                    ws.cell(row=r, column=16, value=f"=O{r}*P11")
-                    ws.cell(row=r, column=21, value=f"=Q{r}*R{r}+S{r}*T{r}")
-                    ws.cell(row=r, column=22, value=f"=U{r}*V11")
-                    ws.cell(row=r, column=23, value=f"=J{r}+P{r}+V{r}")
+                    # Fórmulas de Excel vivas
+                    ws.cell(row=r, column=9, value=f"=E{r}*F{r}+G{r}*H{r}")   # PARC 1
+                    ws.cell(row=r, column=10, value=f"=I{r}*J11")            # P.N1 (30%)
+                    ws.cell(row=r, column=15, value=f"=K{r}*L{r}+M{r}*N{r}") # PARC 2
+                    ws.cell(row=r, column=16, value=f"=O{r}*P11")            # P.N2 (30%)
+                    ws.cell(row=r, column=21, value=f"=Q{r}*R{r}+S{r}*T{r}") # PARC 3
+                    ws.cell(row=r, column=22, value=f"=U{r}*V11")            # P.N3 (40%)
+                    ws.cell(row=r, column=23, value=f"=J{r}+P{r}+V{r}")      # PROM. FINAL TOTAL
                     
+                    # Formatear fuentes y bordes de la fila
                     for c in range(1, 25):
                         ws.cell(row=r, column=c).font = f_norm; ws.cell(row=r, column=c).border = thin_b
 
-                # Autoajustar el tamaño de las columnas para que todo sea legible
+                # Autoajustar el ancho de las columnas
                 for col in ws.columns:
                     max_len = max(len(str(cell.value or '')) for cell in col)
                     ws.column_dimensions[col[0].column_letter].width = max(max_len + 3, 9)
@@ -188,15 +196,16 @@ if pdf_adjunto is not None:
                 wb.save(output)
                 excel_data = output.getvalue()
                 
-                # Despliegue del botón definitivo de descarga
+                # --- RESPUESTA ÚNICA PARA EL USUARIO ---
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.success(f"🎉 ¡Listo! Se cargaron {len(lista_final)} alumnos correctamente.")
+                st.success(f"🎉 ¡Hecho! Se encontraron {len(lista_final)} alumnos ordenados alfabéticamente.")
+                
                 st.download_button(
-                    label="🟢 HACER CLIC AQUÍ PARA DESCARGAR EXCEL DE NOTAS",
+                    label="🟢 DESCARGAR ARCHIVO EXCEL DE NOTAS",
                     data=excel_data,
-                    file_name=f"Cuadro_Notas_{a_txt.replace(' ', '_')}.xlsx",
+                    file_name=f"Notas_{a_txt.replace(' ', '_')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
         except Exception as e:
-            st.error("Ocurrió un error al procesar el archivo. Verifique que sea el PDF de asistencia original.")
+            st.error(f"Error técnico al leer el PDF. Asegúrate de que no esté corrupto.")
